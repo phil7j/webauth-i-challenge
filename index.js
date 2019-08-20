@@ -1,50 +1,38 @@
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const bcrypt = require('bcryptjs');
+const session = require('express-session')
 
-const db = require('./db/dbConfig.js');
+// const db = require('./db/dbConfig.js');
+const authRouter = require('./authRoutes/authRouter')
 const Users = require('./users/users-model.js');
 const restricted = require('./middleware/restricted.js');
 
 const server = express();
 
+const sessionConfig = {
+  name: 'monkey',
+  secret: 'keep it secret, keep it safe!',
+  cookie: {
+    maxAge: 1000 * 30,
+    secure: false, //true in production
+    httpOnly: true
+  },
+  resave: false,
+  saveUninitialized: false //GDPR laws against setting cookies automatically
+}
+
 server.use(helmet());
 server.use(express.json());
 server.use(cors());
+server.use(session(sessionConfig))
 
-server.post('/api/register', (req, res) => {
-  let user = req.body;
+server.use('/api/restricted', restricted)
 
-  // hash password
-  const hash = bcrypt.hashSync(user.password);
-  user.password = hash;
+server.use('/api/auth', authRouter)
 
-  Users.add(user)
-    .then(saved => {
-      res.status(201).json(saved);
-    })
-    .catch(error => {
-      res.status(500).json(error);
-    });
-});
 
-server.post('/api/login', (req, res) => {
-  let { username, password } = req.body;
 
-  Users.findBy({ username })
-    .first()
-    .then(user => {
-      if (user && bcrypt.compareSync(password, user.password)) {
-        res.status(200).json({ message: `Welcome ${user.username}!` });
-      } else {
-        res.status(401).json({ message: 'Invalid Credentials, you shall not pass!' });
-      }
-    })
-    .catch(error => {
-      res.status(500).json(error);
-    });
-});
 
 // can only be accessed by clients with valid credentials
 server.get('/api/users', restricted, (req, res) => {
@@ -54,9 +42,6 @@ server.get('/api/users', restricted, (req, res) => {
     })
     .catch(err => res.send(err));
 });
-
-
-server.use('/api/restricted', restricted)
 
 // can only be accessed by clients with valid credentials
 server.get('/api/restricted', (req, res) => {
